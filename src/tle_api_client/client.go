@@ -12,8 +12,13 @@ import (
 
 const TimeFormat = "2023-07-14T17:11:48+00:00"
 
+type HttpClient interface {
+	Get(url string) (resp *http.Response, err error)
+}
+
 type Client struct {
-	Endpoint string
+	Endpoint   string
+	httpClient HttpClient
 }
 
 func NewClient(endpoint string) *Client {
@@ -22,36 +27,11 @@ func NewClient(endpoint string) *Client {
 	}
 }
 
-func (c *Client) endpointForSatellite(satellite satellite.Satellite) string {
-	return fmt.Sprintf("%s/%s", c.Endpoint, satellite.ID)
-}
-
-func parseTLEData(data []byte) (satellite.SatelliteTLE, error) {
-	raw := rawTLE{}
-	err := json.Unmarshal(data, &raw)
-	if err != nil {
-		return satellite.SatelliteTLE{}, err
-	}
-
-	// parse date from string - raw.Date
-	date, err := time.Parse(TimeFormat, raw.Date)
-	if err != nil {
-		return satellite.SatelliteTLE{}, err
-	}
-
-	return satellite.SatelliteTLE{
-		Satellite: satellite.Satellite{
-			ID:   raw.ID,
-			Name: raw.ID,
-		},
-		Date:  date,
-		Line1: raw.Line1,
-		Line2: raw.Line2,
-	}, nil
-}
-
 func (c *Client) GetSatelliteTLE(s satellite.Satellite) (satellite.SatelliteTLE, error) {
-	response, err := http.Get(c.endpointForSatellite(s))
+	response, err := c.httpClient.Get(c.endpointForSatellite(s))
+	if err != nil {
+		return satellite.SatelliteTLE{}, err
+	}
 
 	if err != nil {
 		return satellite.SatelliteTLE{}, err
@@ -71,6 +51,33 @@ func (c *Client) GetSatelliteTLE(s satellite.Satellite) (satellite.SatelliteTLE,
 	}
 
 	return parseTLEData(responseData)
+}
+
+func (c *Client) endpointForSatellite(satellite satellite.Satellite) string {
+	return fmt.Sprintf("%s/%s", c.Endpoint, satellite.ID)
+}
+
+func parseTLEData(data []byte) (satellite.SatelliteTLE, error) {
+	raw := rawTLE{}
+	err := json.Unmarshal(data, &raw)
+	if err != nil {
+		return satellite.SatelliteTLE{}, err
+	}
+
+	date, err := time.Parse(TimeFormat, raw.Date)
+	if err != nil {
+		return satellite.SatelliteTLE{}, err
+	}
+
+	return satellite.SatelliteTLE{
+		Satellite: satellite.Satellite{
+			ID:   raw.ID,
+			Name: raw.ID,
+		},
+		Date:  date,
+		Line1: raw.Line1,
+		Line2: raw.Line2,
+	}, nil
 }
 
 type rawTLE struct {

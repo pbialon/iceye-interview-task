@@ -1,13 +1,11 @@
 package tle_api_client
 
 import (
-	"encoding/json"
 	"fmt"
 	"github.com/delabania/iceye-interview-task/src/satellite"
 	"io"
 	"log"
 	"net/http"
-	"time"
 )
 
 const TimeFormat = "2023-07-14T17:11:48+00:00"
@@ -16,14 +14,21 @@ type HttpClient interface {
 	Get(url string) (resp *http.Response, err error)
 }
 
-type Client struct {
-	Endpoint   string
-	httpClient HttpClient
+type DataParser interface {
+	Parse(data []byte) (satellite.SatelliteTLE, error)
 }
 
-func NewClient(endpoint string) *Client {
+type Client struct {
+	endpoint   string
+	httpClient HttpClient
+	parser     DataParser
+}
+
+func NewClient(endpoint string, httpClient HttpClient, parser DataParser) *Client {
 	return &Client{
-		Endpoint: endpoint,
+		endpoint:   endpoint,
+		httpClient: httpClient,
+		parser:     parser,
 	}
 }
 
@@ -50,39 +55,9 @@ func (c *Client) GetSatelliteTLE(s satellite.Satellite) (satellite.SatelliteTLE,
 		return satellite.SatelliteTLE{}, err
 	}
 
-	return parseTLEData(responseData)
+	return c.parser.Parse(responseData)
 }
 
 func (c *Client) endpointForSatellite(satellite satellite.Satellite) string {
-	return fmt.Sprintf("%s/%s", c.Endpoint, satellite.ID)
-}
-
-func parseTLEData(data []byte) (satellite.SatelliteTLE, error) {
-	raw := rawTLE{}
-	err := json.Unmarshal(data, &raw)
-	if err != nil {
-		return satellite.SatelliteTLE{}, err
-	}
-
-	date, err := time.Parse(TimeFormat, raw.Date)
-	if err != nil {
-		return satellite.SatelliteTLE{}, err
-	}
-
-	return satellite.SatelliteTLE{
-		Satellite: satellite.Satellite{
-			ID:   raw.ID,
-			Name: raw.ID,
-		},
-		Date:  date,
-		Line1: raw.Line1,
-		Line2: raw.Line2,
-	}, nil
-}
-
-type rawTLE struct {
-	ID    string `json:"id"`
-	Date  string `json:"date"`
-	Line1 string `json:"line1"`
-	Line2 string `json:"line2"`
+	return fmt.Sprintf("%s/%s", c.endpoint, satellite.ID)
 }
